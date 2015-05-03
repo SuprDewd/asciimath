@@ -1,0 +1,41 @@
+= asciimath
+
+`asciimath` is a simple command-line tool for displaying math equations as
+ascii art.
+
+== Installation
+----
+$ ./autogen.sh
+$ ./configure
+$ make
+$ sudo make install
+----
+
+== Usage
+----
+$ asciimath 1/{1+1/{1+1/{1+X}}}
+       1
+ -------------
+         1
+ 1 + ---------
+           1
+     1 + -----
+         1 + X
+$ asciimath
+> a^b^c+4/(1+x/{1-x})^{x-y}
+  c
+ b            4
+a   + ----------------
+                 x - y
+      (      x  )
+      (1 + -----)
+      (    1 - x)
+> a+b+c
+a + b + c
+> <C-d>
+----
+
+== TODO
+- Don't exit(1) when there is a syntax error.
+- Don't exit on <C-c>.
+
