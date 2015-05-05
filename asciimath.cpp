@@ -25,7 +25,7 @@ char *readline(const char *prompt) {
         fprintf(stderr, "> ");
         fflush(stderr);
     }
-    char *buff = new char[LINEMAX];
+    char *buff = (char*)malloc(LINEMAX);
     if (fgets(buff, LINEMAX, stdin) == NULL) {
         delete[] buff;
         return NULL;
@@ -736,12 +736,12 @@ void display() {
         cout << endl;
     }
 
-    delete e;
-
     for (int i = 0; i < e->height; i++)
         delete[] res[i];
 
     delete[] res;
+
+    delete e;
 }
 
 int main(int argc, char *argv[]) {
@@ -764,7 +764,7 @@ int main(int argc, char *argv[]) {
             add_history(line);
 
             s = string(line);
-            delete[] line;
+            free(line);
 
             cerr << endl;
             display();
