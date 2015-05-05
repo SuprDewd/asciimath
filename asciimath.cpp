@@ -1,22 +1,10 @@
-#include <algorithm>
-#include <bitset>
 #include <cassert>
-#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <ctime>
-#include <fstream>
-#include <iomanip>
 #include <iostream>
-#include <list>
-#include <map>
-#include <queue>
-#include <set>
 #include <sstream>
-#include <stack>
 #include <string>
-#include <utility>
 #include <vector>
 using namespace std;
 
@@ -60,18 +48,7 @@ void add_history(const char *string) {
 }
 #endif /* HAVE_READLINE_HISTORY */
 
-#define all(o) (o).begin(), (o).end()
-#define allr(o) (o).rbegin(), (o).rend()
-const int INF = 2147483647;
-typedef long long ll;
-typedef pair<int, int> ii;
-typedef vector<int> vi;
-typedef vector<ii> vii;
-typedef vector<vi> vvi;
-typedef vector<vii> vvii;
 template <class T> int size(T &x) { return x.size(); }
-
-// assert or gtfo
 
 class expr {
 public:
@@ -378,16 +355,17 @@ bool token_is_ident = false,
 
 void error(string msg) {
     cerr << "error: " << msg << endl;
-    exit(1);
 }
 
-void expect(string tok, string msg) {
+bool expect(string tok, string msg) {
     if (token != tok) {
         error(msg);
+        return false;
     }
+    return true;
 }
 
-void pop() {
+bool pop() {
     token_is_ident = false;
     token_is_num = false;
 
@@ -396,7 +374,7 @@ void pop() {
 
     if (at == size(s)) {
         token = "";
-        return;
+        return true;
     }
 
     ss.str("");
@@ -420,6 +398,7 @@ void pop() {
 
         if (!founddigit || (founddot && !afterdot)) {
             error("invalid numeric literal");
+            return false;
         }
 
         token_is_num = true;
@@ -434,37 +413,67 @@ void pop() {
         ss << s[at++];
     } else {
         error(string("unrecognized token: ") + s[at]);
+        return false;
     }
 
     token = ss.str();
+    return true;
 }
 
 expr* e0();
 
 expr* e5() {
     if (token == "(") {
-        pop();
+        if (!pop()) return NULL;
         expr *res = e0();
-        expect(")", "expected ), got " + token);
-        pop();
+        if (res == NULL) return NULL;
+        if (!expect(")", "expected ), got " + token)) {
+            delete res;
+            return NULL;
+        }
+        if (!pop()) {
+            delete res;
+            return NULL;
+        }
         return new insideexpr(res);
     } else if (token == "{") {
-        pop();
+        if (!pop()) return NULL;
         expr *res = e0();
-        expect("}", "expected }, got " + token);
-        pop();
+        if (res == NULL) return NULL;
+        if (!expect("}", "expected }, got " + token)) {
+            delete res;
+            return NULL;
+        }
+        if (!pop()) {
+            delete res;
+            return NULL;
+        }
         return new hiddeninsideexpr(res);
     } else if (token_is_num) {
         expr *res = new numexpr(token);
-        pop();
+        if (!pop()) {
+            delete res;
+            return NULL;
+        }
         return res;
     } else if (token_is_ident) {
         expr *res = new numexpr(token);
-        pop();
+        if (!pop()) {
+            delete res;
+            return NULL;
+        }
 
         if (token == "_") {
-            pop();
-            res = new subexpr(res, e5());
+            if (!pop()) {
+                delete res;
+                return NULL;
+            }
+            expr *rest = e5();
+            if (rest == NULL) {
+                delete res;
+                return NULL;
+            }
+            res = new subexpr(res, rest);
         }
 
         return res;
@@ -479,8 +488,9 @@ expr* e5() {
 
 expr *e4() {
     if (token == "-") {
-        pop();
+        if (!pop()) return NULL;
         expr *e = e4();
+        if (e == NULL) return NULL;
         return new negexpr(e);
     } else {
         return e5();
@@ -489,15 +499,32 @@ expr *e4() {
 
 expr* e3() {
     vector<expr*> exps;
-    exps.push_back(e4());
+    expr *e = e4();
+    if (e == NULL) return NULL;
+    exps.push_back(e);
 
+    bool ok = true;
     while (true) {
         if (token == "^") {
-            pop();
-            exps.push_back(e4());
+            if (!pop()) {
+                ok = false;
+                break;
+            }
+            expr *e = e4();
+            if (e == NULL) {
+                ok = false;
+                break;
+            }
+            exps.push_back(e);
         } else {
             break;
         }
+    }
+
+    if (!ok) {
+        for (int i = 0; i < size(exps); i++)
+            delete exps[i];
+        return NULL;
     }
 
     expr *res = exps[size(exps) - 1];
@@ -511,23 +538,55 @@ expr* e3() {
 expr* e2() {
     vector<expr*> exps;
     vector<char> ops;
-    exps.push_back(e3());
 
+    expr *e = e3();
+    if (e == NULL) return NULL;
+    exps.push_back(e);
+
+    bool ok = true;
     while (true) {
         if (token == "*") {
-            pop();
+            if (!pop()) {
+                ok = false;
+                break;
+            }
             ops.push_back('*');
-            exps.push_back(e3());
+            expr *e = e3();
+            if (e == NULL) {
+                ok = false;
+                break;
+            }
+            exps.push_back(e);
         } else if (token == "/") {
-            pop();
+            if (!pop()) {
+                ok = false;
+                break;
+            }
             ops.push_back('/');
-            exps.push_back(e3());
+            expr *e = e3();
+            if (e == NULL) {
+                ok = false;
+                break;
+            }
+            exps.push_back(e);
         } else if (token_is_ident || token_is_num || token == "(" || token == "{") {
             ops.push_back(' ');
-            exps.push_back(e3());
+            expr *e = e3();
+            if (e == NULL) {
+                ok = false;
+                break;
+            }
+            exps.push_back(e);
         } else {
             break;
         }
+    }
+
+    if (!ok) {
+        for (int i = 0; i < size(exps); i++) {
+            delete exps[i];
+        }
+        return NULL;
     }
 
     expr *res = exps[0];
@@ -549,20 +608,46 @@ expr* e2() {
 expr* e1() {
     vector<expr*> exps;
     vector<char> ops;
-    exps.push_back(e2());
 
+    expr *e = e2();
+    if (e == NULL) return NULL;
+    exps.push_back(e);
+
+    bool ok = true;
     while (true) {
         if (token == "+") {
-            pop();
+            if (!pop()) {
+                ok = false;
+                break;
+            }
             ops.push_back('+');
-            exps.push_back(e2());
+            expr *e = e2();
+            if (e == NULL) {
+                ok = false;
+                break;
+            }
+            exps.push_back(e);
         } else if (token == "-") {
-            pop();
+            if (!pop()) {
+                ok = false;
+                break;
+            }
             ops.push_back('-');
-            exps.push_back(e2());
+            expr *e = e2();
+            if (e == NULL) {
+                ok = false;
+                break;
+            }
+            exps.push_back(e);
         } else {
             break;
         }
+    }
+
+    if (!ok) {
+        for (int i = 0; i < size(exps); i++)
+            delete exps[i];
+        return NULL;
     }
 
     expr *res = exps[0];
@@ -583,13 +668,28 @@ expr* e0() {
     vector<expr*> exps;
     exps.push_back(e1());
 
+    bool ok = true;
     while (true) {
         if (token == "=") {
-            pop();
-            exps.push_back(e1());
+            if (!pop()) {
+                ok = false;
+                break;
+            }
+            expr *e = e1();
+            if (e == NULL) {
+                ok = false;
+                break;
+            }
+            exps.push_back(e);
         } else {
             break;
         }
+    }
+
+    if (!ok) {
+        for (int i = 0; i < size(exps); i++)
+            delete exps[i];
+        return NULL;
     }
 
     expr *res = exps[0];
@@ -602,11 +702,19 @@ expr* e0() {
 
 void display() {
     at = 0;
-    pop();
+    if (!pop()) {
+        return;
+    }
 
     expr *e = e0();
+    if (e == NULL) {
+        return;
+    }
 
-    expect("", "unexpected token at end of expression: " + token);
+    if (!expect("", "unexpected token at end of expression: " + token)) {
+        delete e;
+        return;
+    }
 
     char **res = new char*[e->height];
     for (int i = 0; i < e->height; i++) {
@@ -646,6 +754,7 @@ int main(int argc, char *argv[]) {
         s = ss.str();
         display();
     } else {
+
         while (true) {
             char *line = readline("> ");
             if (line == NULL) {
@@ -657,9 +766,9 @@ int main(int argc, char *argv[]) {
             s = string(line);
             delete[] line;
 
-            cout << endl;
+            cerr << endl;
             display();
-            cout << endl;
+            cerr << endl;
         }
     }
 
