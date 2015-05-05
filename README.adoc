@@ -35,7 +35,3 @@ a + b + c
 > <C-d>
 ----
 
-== TODO
-- Don't exit(1) when there is a syntax error.
-- Don't exit on <C-c>.
-
