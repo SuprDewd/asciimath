@@ -153,6 +153,10 @@ public:
         this->b = b;
         height = a->height + 1 + b->height;
         width = max(a->width, b->width);
+        if (width > 1) {
+            width += 2;
+        }
+
         lvc = a->height;
     }
 
@@ -267,12 +271,9 @@ public:
 
 class insideexpr: public expr {
 public:
-    char l, r;
     expr *e;
-    insideexpr(char l, expr *e, char r) {
-        this->l = l;
+    insideexpr(expr *e) {
         this->e = e;
-        this->r = r;
         height = e->height;
         width = e->width + 2;
         lvc = (e->height) / 2;
@@ -284,9 +285,18 @@ public:
 
     void draw(char **res, int x, int y) {
         e->draw(res, x, y + 1);
-        for (int i = 0; i < height; i++) {
-            res[x+i][y] = l;
-            res[x+i][y + e->width + 1] = r;
+        if (height == 1) {
+            res[x][y] = '(';
+            res[x][y + e->width + 1] = ')';
+        } else {
+            res[x][y] = '/';
+            res[x][y + e->width + 1] = '\\';
+            for (int i = 1; i < height-1; i++) {
+                res[x+i][y] = '(';
+                res[x+i][y + e->width + 1] = ')';
+            }
+            res[x+height-1][y] = '\\';
+            res[x+height-1][y + e->width + 1] = '/';
         }
     }
 };
@@ -312,6 +322,9 @@ public:
 
 /*
 
+NUM = [0-9]+(\.[0-9]+)?
+IDENT = [a-zA-Z][a-zA-Z0-9]*
+
 e0 := e1 = e0 |
       e1
 
@@ -331,7 +344,8 @@ e4 := -e4 |
       e5
 
 e5 := NUM |
-      VAR |
+      IDENT |
+      IDENT_e5 |
       ( e0 ) |
       { e0 }
 
@@ -387,25 +401,34 @@ void pop() {
 
     ss.str("");
     ss.clear();
-    if (('0' <= s[at] && s[at] <= '9') || s[at] == '.') {
+    if ('0' <= s[at] && s[at] <= '9') {
         bool founddigit = false,
-             founddot = false;
+             founddot = false,
+             afterdot = false;
 
         while (at < size(s) && (('0' <= s[at] && s[at] <= '9') || (!founddot && s[at] == '.'))) {
             if (s[at] == '.') founddot = true;
-            else founddigit = true;
+            else {
+                if (founddot) {
+                    afterdot = true;
+                }
+                founddigit = true;
+            }
 
             ss << s[at++];
         }
 
-        if (!founddigit) {
+        if (!founddigit || (founddot && !afterdot)) {
             error("invalid numeric literal");
         }
 
         token_is_num = true;
 
     } else if (('a' <= s[at] && s[at] <= 'z') || ('A' <= s[at] && s[at] <= 'Z')) {
-        ss << s[at++];
+        while (at < size(s) && (('a' <= s[at] && s[at] <= 'z') || ('A' <= s[at] && s[at] <= 'Z') || ('0' <= s[at] && s[at] <= '9'))) {
+            ss << s[at++];
+        }
+
         token_is_ident = true;
     } else if (is_op(s[at])) {
         ss << s[at++];
@@ -424,23 +447,18 @@ expr* e5() {
         expr *res = e0();
         expect(")", "expected ), got " + token);
         pop();
-        return new insideexpr('(', res, ')');
+        return new insideexpr(res);
     } else if (token == "{") {
         pop();
         expr *res = e0();
         expect("}", "expected }, got " + token);
         pop();
         return new hiddeninsideexpr(res);
-    } else {
-        if (token == "") {
-            error("unexpected end of expression");
-        }
-
-        char c = token[0];
-        if (!(c == '.' || ('0' <= c && c <= '9') || ('a' <= c && c <= 'z') || ('A' <= c && c <= 'Z'))) {
-            error(string("invalid literal: ") + token);
-        }
-
+    } else if (token_is_num) {
+        expr *res = new numexpr(token);
+        pop();
+        return res;
+    } else if (token_is_ident) {
         expr *res = new numexpr(token);
         pop();
 
@@ -450,6 +468,12 @@ expr* e5() {
         }
 
         return res;
+    } else if (token == "") {
+        error("unexpected end of expression");
+        return NULL;
+    } else {
+        error(string("invalid literal: ") + token);
+        return NULL;
     }
 }
 
@@ -498,7 +522,7 @@ expr* e2() {
             pop();
             ops.push_back('/');
             exps.push_back(e3());
-        } else if (token_is_ident || token_is_num) {
+        } else if (token_is_ident || token_is_num || token == "(" || token == "{") {
             ops.push_back(' ');
             exps.push_back(e3());
         } else {
@@ -632,7 +656,10 @@ int main(int argc, char *argv[]) {
 
             s = string(line);
             delete[] line;
+
+            cout << endl;
             display();
+            cout << endl;
         }
     }
 
