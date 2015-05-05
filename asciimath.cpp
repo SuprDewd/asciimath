@@ -123,6 +123,28 @@ public:
     }
 };
 
+class subexpr: public expr {
+public:
+    expr *a, *b;
+    subexpr(expr *a, expr *b) {
+        this->a = a;
+        this->b = b;
+        height = a->height + b->height;
+        width = a->width + b->width;
+        lvc = a->lvc;
+    }
+
+    ~subexpr() {
+        delete a;
+        delete b;
+    }
+
+    void draw(char **res, int x, int y) {
+        a->draw(res, x, y);
+        b->draw(res, x + a->height, y + a->width);
+    }
+};
+
 class divexpr: public expr {
 public:
     expr *a, *b;
@@ -290,6 +312,7 @@ bool is_op(char c) {
         case ')':
         case '{':
         case '}':
+        case '_':
             return true;
     }
     return false;
@@ -370,8 +393,14 @@ expr* e5() {
             error(string("invalid literal: ") + token);
         }
 
-        numexpr *res = new numexpr(token);
+        expr *res = new numexpr(token);
         pop();
+
+        if (token == "_") {
+            pop();
+            res = new subexpr(res, e5());
+        }
+
         return res;
     }
 }
