@@ -229,6 +229,42 @@ public:
     }
 };
 
+class invmulexpr: public expr {
+public:
+    char op;
+    expr *a, *b;
+    invmulexpr(expr *a, expr *b) {
+        this->a = a;
+        this->b = b;
+
+        int aabove = a->lvc,
+            abelow = a->height - a->lvc - 1;
+
+        int babove = b->lvc,
+            bbelow = b->height - b->lvc - 1;
+
+        width = a->width + 1 + b->width;
+        height = max(aabove, babove) + 1 + max(abelow, bbelow);
+        lvc = max(aabove, babove);
+    }
+
+    ~invmulexpr() {
+        delete a;
+        delete b;
+    }
+
+    void draw(char **res, int x, int y) {
+
+        int aabove = a->lvc;
+        int babove = b->lvc;
+
+        int above = max(aabove, babove);
+
+        a->draw(res, x + (above - aabove), y);
+        b->draw(res, x + (above - babove), y + a->width + 1);
+    }
+};
+
 class insideexpr: public expr {
 public:
     char l, r;
@@ -285,6 +321,7 @@ e1 := e2 + e1 |
 
 e2 := e3 * e2 |
       e3 / e2 |
+      e3 e2 |
       e3
 
 e3 := e3 ^ e4 |
@@ -322,6 +359,8 @@ string token;
 stringstream ss;
 string s;
 int at = 0;
+bool token_is_ident = false,
+     token_is_num = false;
 
 void error(string msg) {
     cerr << "error: " << msg << endl;
@@ -335,6 +374,9 @@ void expect(string tok, string msg) {
 }
 
 void pop() {
+    token_is_ident = false;
+    token_is_num = false;
+
     while (at < size(s) && s[at] == ' ')
         at++;
 
@@ -359,7 +401,13 @@ void pop() {
         if (!founddigit) {
             error("invalid numeric literal");
         }
-    } else if (is_op(s[at]) || ('a' <= s[at] && s[at] <= 'z') || ('A' <= s[at] && s[at] <= 'Z')) {
+
+        token_is_num = true;
+
+    } else if (('a' <= s[at] && s[at] <= 'z') || ('A' <= s[at] && s[at] <= 'Z')) {
+        ss << s[at++];
+        token_is_ident = true;
+    } else if (is_op(s[at])) {
         ss << s[at++];
     } else {
         error(string("unrecognized token: ") + s[at]);
@@ -450,6 +498,9 @@ expr* e2() {
             pop();
             ops.push_back('/');
             exps.push_back(e3());
+        } else if (token_is_ident || token_is_num) {
+            ops.push_back(' ');
+            exps.push_back(e3());
         } else {
             break;
         }
@@ -461,6 +512,8 @@ expr* e2() {
             res = new twoexpr(res, '*', exps[i+1]);
         } else if (ops[i] == '/') {
             res = new divexpr(res, exps[i+1]);
+        } else if (ops[i] == ' ') {
+            res = new invmulexpr(res, exps[i+1]);
         } else {
             assert(false);
         }
